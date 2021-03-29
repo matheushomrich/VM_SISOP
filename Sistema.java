@@ -238,6 +238,7 @@ public class Sistema {
 		aux.dump(vm.m, 0, 15);
 	}
 
+	/*
 	public void test3(){
 		Aux aux = new Aux();
 		Word[] p = new Programas().leValor;
@@ -261,7 +262,7 @@ public class Sistema {
 		vm.cpu.run();
 		aux.dump(vm.m, 0, 15);
 	}
-
+*/
 	public void test4(){
 		//
 		Aux aux = new Aux();
@@ -361,6 +362,34 @@ public class Sistema {
 			new Word(Opcode.STOP, -1, -1, -1) // PARE
 			
 		}; 
+
+		/*
+		LDI 0 2
+STD 0 30
+LDI 7 35
+JMPILM 0 22
+LDI 1 0
+LDI 2 1
+STX 7 1
+ADDI 7 1
+SUBI 0 1
+JMPIGM 0 11
+STOP
+LDI 3 0
+ADD 3 1
+ADD 3 2
+STX 7 3
+LDI 1 0
+ADD 1 2
+LDI 2 0
+ADD 2 3
+ADDI 7 1
+SUBI 0 1
+JMP 9
+LDI 6 -1
+STX 7 6
+STOP
+		*/
 
 		/*
 		public Word[] p2 = new Word[] {
