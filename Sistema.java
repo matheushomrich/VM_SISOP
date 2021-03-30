@@ -6,6 +6,8 @@
 //
 
 import java.util.*;
+
+//import org.graalvm.compiler.word.Word;
 public class Sistema {
 	
 	// -------------------------------------------------------------------------------------------------------
@@ -14,11 +16,11 @@ public class Sistema {
 	// -------------------------------------------------------------------------------------------------------
 	// --------------------- M E M O R I A -  definicoes de opcode e palavra de memoria ---------------------- 
 	
-	public class Word { 	// cada posicao da memoria tem uma instrucao (ou um dado)
+	public class Word { 	// cada posicao da memoria tem uma instrucao (ou um DATA)
 		public Opcode opc; 	//
 		public int r1; 		// indice do primeiro registrador da operacao (Rs ou Rd cfe opcode na tabela)
 		public int r2; 		// indice do segundo registrador da operacao (Rc ou Rs cfe operacao)
-		public int p; 		// parametro para instrucao (k ou A cfe operacao), ou o dado, se opcode = DADO
+		public int p; 		// parametro para instrucao (k ou A cfe operacao), ou o DATA, se opcode = DATA
 
 		public Word(Opcode _opc, int _r1, int _r2, int _p) {  
 			opc = _opc;   r1 = _r1;    r2 = _r2;	p = _p;
@@ -30,7 +32,7 @@ public class Sistema {
     // --------------------- C P U  -  definicoes da CPU ----------------------------------------------------- 
 
 	public enum Opcode {
-		DATA, ___,		    // se memoria nesta posicao tem um dado, usa DATA, se nao usada ee NULO ___
+		DATA, ___,		    // se memoria nesta posicao tem um DATA, usa DATA, se nao usada ee NULO ___
 		JMP, JMPI, JMPIG, JMPIL, JMPIE,  JMPIM, JMPIGM, JMPILM, JMPIEM, STOP,   // desvios e parada
 		ADDI, SUBI,  ADD, SUB, MULT,         // matematicos
 		LDI, LDD, STD,LDX, STX, SWAP, 
@@ -44,7 +46,8 @@ public class Sistema {
 		private int[] reg;       	// registradores da CPU
 		private Interrupts irpt;	// durante instrucao, interrupcao pode ser sinalizada
 		private Word[] m;   // CPU acessa MEMORIA, guarda referencia 'm' a ela. memoria nao muda. ee sempre a mesma.
-						
+		private int aux;
+		
 		public CPU(Word[] _m) {     // ref a MEMORIA e interrupt handler passada na criacao da CPU
 			m = _m; 				// usa o atributo 'm' para acessar a memoria.
 			reg = new int[10]; 		// aloca o espaço dos registradores
@@ -55,44 +58,19 @@ public class Sistema {
 		}
 	
 		public void run() { 		// execucao da CPU supoe que o contexto da CPU, vide acima, esta devidamente setado
-			while (true) { 			// ciclo de instrucoes. acaba cfe instrucao, veja cada caso.
+			while (true) { // ciclo de instrucoes. acaba cfe instrucao, veja cada caso.
 				// FETCH
-					ir = m[pc]; 	// busca posicao da memoria apontada por pc, guarda em ir
+				ir = m[pc]; 	// busca posicao da memoria apontada por pc, guarda em ir
 				// EXECUTA INSTRUCAO NO ir
 					switch (ir.opc) { // para cada opcode, sua execução
-
-						case LDI: // Rd <- k
-							reg[ir.r1] = ir.p;
-							pc++;
+						case JMP: // Jump immediate
+							pc = ir.p;
 							break;
 
-						case STD: // [A] <- Rs
-							    m[ir.p].opc = Opcode.DATA;
-							    m[ir.p].p = reg[ir.r1];
-							    pc++;
-						break;
-
-						case ADD: // Rd <- Rd + Rs
-							reg[ir.r1] = reg[ir.r1] + reg[ir.r2];
-							pc++;
+						case JMPI: // Jump register
+							pc = ir.r1;
 							break;
-
-						case ADDI: // Rd <- Rd + k
-							reg[ir.r1] = reg[ir.r1] + ir.p;
-							pc++;
-							break;
-
-						case STX: // [Rd] <- Rs
-							    m[reg[ir.r1]].opc = Opcode.DATA;      
-							    m[reg[ir.r1]].p = reg[ir.r2];          
-								pc++;
-							break;
-
-						case SUB: // Rd <- Rd - Rs
-							reg[ir.r1] = reg[ir.r1] - reg[ir.r2];
-							pc++;
-							break;
-
+							
 						case JMPIG: // If Rc > 0 Then PC <- Rs Else PC <- PC +1
 							if (reg[ir.r2] > 0) {
 								pc = reg[ir.r1];
@@ -100,8 +78,141 @@ public class Sistema {
 								pc++;
 							}
 							break;
+
+						case JMPIL: // If Rc < 0 Then PC <- Rs Else PC <- PC +1
+							if (reg[ir.r2] < 0) {
+								pc = reg[ir.r1];
+							} else {
+								pc++;
+							}
+							break;
+
+						case JMPIE: // If Rc == 0 Then PC <- Rs Else PC <- PC +1
+							if (reg[ir.r2] == 0) {
+								pc = reg[ir.r1];
+							} else {
+								pc++;
+							}
+							break;
+
+						case JMPIM: // Jump to adress in memory
+							pc = m[ir.p].p;
+							break;
+
+						case JMPIGM: // Jump to adress in memory; If Rc > 0 Then PC <- P Else PC <- PC +1
+							if (reg[ir.r2] > 0) {
+								pc = ir.p;
+							} else {
+								pc++;
+							}
+							break;
+
+						case JMPILM: // Jump to adress in memory; If Rc < 0 Then PC <- P Else PC <- PC +1
+							if (reg[ir.r2] < 0) {
+								pc = ir.p;
+							} else {
+								pc++;
+							}
+							break;
 						
-							case TRAP:
+						case JMPIEM: // Jump to adress in memory; If Rc == 0 Then PC <- P Else PC <- PC +1
+							if (reg[ir.r2] == 0) {
+								pc = ir.p;
+							} else {
+								pc++;
+							}
+							break;
+
+						case STOP: // por enquanto, para execucao
+							irpt = Interrupts.intSTOP;
+							System.out.println("Program ended by STOP instruction at address " + pc);
+							break;
+
+						case ADDI: // Rd <- Rd + k
+							aux = reg[ir.r1];
+							reg[ir.r1] = reg[ir.r1] + ir.p;
+							pc++;
+							if((aux > reg[ir.r1] && ir.p > 0) || (aux < reg[ir.r1] && ir.p < 0)) {
+								irpt = Interrupts.intInstrucaoInvalida;
+								System.out.println("Overflow Exception in register " + ir.r1);
+							}
+							break;
+
+						case SUBI: // Rd <- Rd - k
+							aux = reg[ir.r1];
+							reg[ir.r1] = reg[ir.r1] - ir.p;
+							pc++;
+							if((aux < reg[ir.r1] && ir.p > 0) || (aux > reg[ir.r1] && ir.p < 0)) {
+								irpt = Interrupts.intInstrucaoInvalida;
+								System.out.println("Overflow Exception in register " + ir.r1);
+							}
+							break;
+
+						case ADD: // Rd <- Rd + Rs
+							aux = reg[ir.r1];
+							reg[ir.r1] = reg[ir.r1] + reg[ir.r2];
+							pc++;
+							if((aux > reg[ir.r1] && reg[ir.r2] > 0) || (aux < reg[ir.r1] && reg[ir.r2] < 0)) {
+								irpt = Interrupts.intInstrucaoInvalida;
+								System.out.println("Overflow Exception in register " + ir.r1);
+							}
+							break;
+
+						case SUB: // Rd <- Rd - Rs
+							aux = reg[ir.r1];
+							reg[ir.r1] = reg[ir.r1] - reg[ir.r2];
+							pc++;
+							if((aux < reg[ir.r1] && reg[ir.r2] > 0) || (aux > reg[ir.r1] && reg[ir.r2] < 0)) {
+								irpt = Interrupts.intInstrucaoInvalida;
+								System.out.println("Overflow Exception in register " + ir.r1);
+							}
+							break;
+
+						case MULT: //Rd <- Rd * Rs
+							aux = reg[ir.r1];
+							reg[ir.r1] = reg[ir.r1] * reg[ir.r2];
+							pc++;
+							if((aux > reg[ir.r1] && reg[ir.r2] > 0) || (aux < reg[ir.r1] && reg[ir.r2] < 0)) {
+								irpt = Interrupts.intInstrucaoInvalida;
+								System.out.println("Overflow Exception in register " + ir.r1);
+							}
+							break;
+
+						case LDI: // Rd <- k
+							reg[ir.r1] = ir.p;
+							pc++;
+							break;
+
+						case LDD: // Rd <- [A]
+							reg[ir.r1] = m[ir.p].p;
+							pc++;
+							break;
+
+						case STD: // [A] <- Rs
+							m[ir.p].opc = Opcode.DATA;
+							m[ir.p].p = reg[ir.r1];
+							pc++;
+							break;
+
+						case LDX: // Rd <- [Rs]
+							reg[ir.r1] = m[reg[ir.r2]].p;
+							pc++;
+							break;
+
+						case STX: // [Rd] <- Rs
+							m[reg[ir.r1]].opc = Opcode.DATA;
+							m[reg[ir.r1]].p = reg[ir.r2];
+							pc++;
+							break;
+
+						case SWAP: // Rd <-> Rs
+							int t = ir.r1;
+							ir.r1 = ir.r2;
+							ir.r2 = t;
+							pc++;
+							break;
+
+						case TRAP:
 							if (reg[8] == 1)
 							{
 								Scanner keyboard = new Scanner(System.in);
@@ -109,40 +220,28 @@ public class Sistema {
 								int in = keyboard.nextInt();
 								m[reg[9]].opc = Opcode.DATA;
 								m[reg[9]].p = in;
-								keyboard.close();
+								//keyboard.next();
 							}
-								else if (reg[8] == 2)
+							else if (reg[8] == 2)
 							{
 								System.out.println(m[reg[9]].p);
-								
 							}
-								pc++;
-								break;
-						
-						case STOP: // para execucao
-                        irpt = Interrupts.intSTOP;
-                        break;
-
-						/*
-						case STOP: // por enquanto, para execucao
+							pc++;
 							break;
-						*/
-					}
-				
-				// VERIFICA INTERRUPÇÃO !!! - TERCEIRA FASE DO CICLO DE INSTRUÇÕES
-				// verifica int - agora simplesmente para programa em qualquer caso
+
+							
+
+						default:   // Instrução Inválida
+						irpt = Interrupts.intEnderecoInvalido;
+							System.out.println("Instrucao Invalida: " + ir.opc + " no endereco " + pc);
+							break;
+					
+				}
 				if (!(irpt == Interrupts.noInterrupt)) {
 					System.out.print("Interrupcao ");
 					System.out.println(irpt);
 					break; // break sai do loop da cpu
 				}
-
-				// saida convencional da CPU
-				/*
-				if (ir.opc==Opcode.STOP) {   
-					break; // break sai do loop da cpu
-				}
-				*/
 			}
 		}
 	}
@@ -208,7 +307,7 @@ public class Sistema {
     // ------------------- instancia e testa sistema
 	public static void main(String args[]) {
 		Sistema s = new Sistema();
-		s.test4();
+		s.test1();
 	}
     // -------------------------------------------------------------------------------------------------------
     // --------------- TUDO ABAIXO DE MAIN É AUXILIAR PARA FUNCIONAMENTO DO SISTEMA - nao faz parte 
@@ -238,35 +337,36 @@ public class Sistema {
 		aux.dump(vm.m, 0, 15);
 	}
 
-	/*
-	public void test3(){
-		Aux aux = new Aux();
-		Word[] p = new Programas().leValor;
-		Word[] p2 = new Programas().fibonacci10;
-		
-		//leValor
-		aux.carga(p, vm.m);
-		vm.cpu.setContext(0);
-		System.out.println("---------------------------------- programa carregado ");
-		aux.dump(vm.m, 0, 15);
-		System.out.println("---------------------------------- após execucao ");
-		vm.cpu.run();
-		aux.dump(vm.m, 0, 15);
-
-		//fibonacci
-		aux.carga(p2, vm.m);
-		vm.cpu.setContext(0);
-		System.out.println("---------------------------------- programa carregado ");
-		aux.dump(vm.m, 0, 15);
-		System.out.println("---------------------------------- após execucao ");
-		vm.cpu.run();
-		aux.dump(vm.m, 0, 15);
-	}
-*/
-	public void test4(){
+	public void testp2(){
 		//
 		Aux aux = new Aux();
         Word[] p = new Programas().p2;
+        aux.carga(p, vm.m);
+        vm.cpu.setContext(0);
+        System.out.println("---------------------------------- programa carregado ");
+        aux.dump(vm.m, 0, 40);
+        System.out.println("---------------------------------- após execucao ");
+        vm.cpu.run();
+        aux.dump(vm.m, 0, 40);
+    }
+
+	public void testp3(){
+		//
+		Aux aux = new Aux();
+        Word[] p = new Programas().p3Fatorial;
+        aux.carga(p, vm.m);
+        vm.cpu.setContext(0);
+        System.out.println("---------------------------------- programa carregado ");
+        aux.dump(vm.m, 0, 40);
+        System.out.println("---------------------------------- após execucao ");
+        vm.cpu.run();
+        aux.dump(vm.m, 0, 40);
+    }
+
+	public void testp4(){
+		//
+		Aux aux = new Aux();
+        Word[] p = new Programas().p4BubbleSort;
         aux.carga(p, vm.m);
         vm.cpu.setContext(0);
         System.out.println("---------------------------------- programa carregado ");
@@ -333,6 +433,38 @@ public class Sistema {
 	
 		// programa le valor e se
 		public Word[] p2 = new Word[] {
+			new Word(Opcode.LDI, 0, -1, 2),
+			new Word(Opcode.STD, 0, -1, 30),
+			new Word(Opcode.LDI, 7, -1, 35),
+			new Word(Opcode.JMPILM, -1, 0, 22),
+			new Word(Opcode.LDI, 1, -1, 0),
+			new Word(Opcode.LDI, 2, -1, 1),
+			new Word(Opcode.STX, 7, 1, -1),
+			new Word(Opcode.ADDI, 7, -1, 1),
+			new Word(Opcode.SUBI, 0, -1, 1),
+			new Word(Opcode.JMPIGM, -1, 0, 11),
+			new Word(Opcode.STOP, -1, -1, -1),
+			new Word(Opcode.LDI, 3, -1, 0),
+			new Word(Opcode.ADD, 3, 1, -1),
+			new Word(Opcode.ADD, 3, 2, -1),
+			new Word(Opcode.STX, 7, 3, -1),
+			new Word(Opcode.LDI, 1, -1, 0),
+			new Word(Opcode.ADD, 1, 2, -1),
+			new Word(Opcode.LDI, 2, -1, 0),
+			new Word(Opcode.ADD, 2, 3, -1),
+			new Word(Opcode.ADDI, 7, -1, 1),
+			new Word(Opcode.SUBI, 0, -1, 1),
+			new Word(Opcode.JMP, -1, -1, 9),
+			new Word(Opcode.LDI, 6, -1, -1),
+			new Word(Opcode.STX, 7, 6, -1),
+			new Word(Opcode.STOP, -1, -1, -1),
+
+
+			
+		}; 
+
+		/*
+		public Word[] p2 = new Word[] {
 			new Word(Opcode.LDI, 4, -1, 10), // carrega 10 no reg4
 			new Word(Opcode.STD, 4, -1, 60), // aloca o conteudo de 4 na posicao 60
 			new Word(Opcode.LDD, 5, -1, 60), // carrega o valor da posicao 60 no reg5
@@ -361,7 +493,8 @@ public class Sistema {
 			new Word(Opcode.STD, 4, -1, 65), // aloca o conteudo do reg4 na posicao 65
 			new Word(Opcode.STOP, -1, -1, -1) // PARE
 			
-		}; 
+		};
+
 
 		/*
 		LDI 0 2
